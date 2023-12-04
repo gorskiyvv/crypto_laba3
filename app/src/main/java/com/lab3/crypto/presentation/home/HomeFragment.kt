@@ -1,0 +1,95 @@
+package com.suatzengin.whataboutcrypto.presentation.home
+
+import android.os.Bundle
+import android.view.LayoutInflater
+import android.view.View
+import android.view.ViewGroup
+import androidx.fragment.app.Fragment
+import androidx.fragment.app.viewModels
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.repeatOnLifecycle
+import androidx.navigation.fragment.findNavController
+import androidx.recyclerview.widget.LinearLayoutManager
+import com.google.android.material.snackbar.Snackbar
+import com.suatzengin.whataboutcrypto.data.remote.dto.coins.CoinItem
+import com.suatzengin.whataboutcrypto.databinding.FragmentHomeBinding
+import com.suatzengin.whataboutcrypto.presentation.MainActivity
+import com.suatzengin.whataboutcrypto.presentation.home.adapters.CoinsRecyclerAdapter
+import com.suatzengin.whataboutcrypto.util.OnClickListener
+import dagger.hilt.android.AndroidEntryPoint
+import kotlinx.coroutines.launch
+
+@AndroidEntryPoint
+class HomeFragment : Fragment() {
+
+    private var _binding: FragmentHomeBinding? = null
+    private val binding get() = _binding!!
+
+    private val viewModel: HomeViewModel by viewModels()
+    private lateinit var adapterCoins: CoinsRecyclerAdapter
+
+    override fun onCreateView(
+        inflater: LayoutInflater, container: ViewGroup?,
+        savedInstanceState: Bundle?
+    ): View? {
+        (activity as MainActivity).supportActionBar?.hide()
+        _binding = FragmentHomeBinding.inflate(inflater, container, false)
+
+        return binding.root
+    }
+
+    override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
+        super.onViewCreated(view, savedInstanceState)
+        setupRecyclerViews()
+        observeData()
+        binding.swipeRefresh.setOnRefreshListener {
+            viewModel.getCoins()
+            viewModel.getTrendingCoins()
+            binding.swipeRefresh.isRefreshing = false
+        }
+    }
+
+    private fun setupRecyclerViews() {
+        adapterCoins = CoinsRecyclerAdapter(onClickListener = object : OnClickListener {
+            override fun onItemClick(coin: CoinItem) {
+                val action = HomeFragmentDirections.actionHomePageToDetailFragment(
+                    coin.priceChangePercentage24h.toFloat(),
+                    coin.id
+                )
+                findNavController().navigate(action)
+            }
+        })
+        binding.rvCoinList.adapter = adapterCoins
+        val rvTrending = binding.rvTrendingCoins
+        rvTrending.layoutManager =
+            LinearLayoutManager(requireContext(), LinearLayoutManager.HORIZONTAL, false)
+    }
+
+    private fun observeData() {
+        lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.STARTED) {
+                launch {
+                    viewModel.state.collect { state ->
+                        adapterCoins.submitList(state.coinList)
+
+                        if (state.message.isNotEmpty()) {
+                            Snackbar.make(
+                                requireContext(),
+                                binding.layoutId,
+                                state.message,
+                                Snackbar.LENGTH_SHORT
+                            ).show()
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+
+    override fun onDestroyView() {
+        super.onDestroyView()
+        _binding = null
+    }
+}
